@@ -8,10 +8,10 @@ var deviceName = "KIA-BLUETOOTH";
 
 // End of variables initializing 
 
-console.log('t#1 V1.7 Started Script:' + device.currentSource);
+console.log('t#1 V1.8 Started Script:' + device.currentSource);
 //console.log("t1a is this the same? " + (deviceName === "KIA-BLUETOOTH") + " yes or no?");
 
-if (!(device.version && device.version.isSupported(0, 54))) {
+if (!(device.version && device.version.isSupported(0, 55))) {
 
     var notification = device.notifications.createNotification('on{X} is out of date');
     notification.content = "the recipe '" + device.currentSource + "' requires an up to date on{X} application.";
@@ -24,6 +24,8 @@ else {
 
     // whether the device was found
     var found = false;
+
+    var currentMOT = ""; // last (current MOT)
 
     // the timer name
     var timerName = "BluetoothRecipeTimer";
@@ -61,8 +63,45 @@ else {
         }
     });
 
+
+    // register on 'disconnected' event to determine whether we are still driving 
+    device.bluetooth.on('disconnected', function (bluetoothDevice) {
+        console.log("t#9 BT disconnected: " + bluetoothDevice.name); //DEBUG -- out 
+        // show notification on this focca tooooo //DEBUG -- out 
+        var notification = device.notifications.createNotification('t#9 BT disconnect:' + bluetoothDevice.name);
+        notification.show();
+
+        //now start the timer to monitor drop of MOT="driving" ...
+
+        device.scheduler.setTimer({
+            name: timerNameoff,
+            time: new Date().getTime() + timeOut,
+            exact: true
+        },
+function () {
+    console.log('t#10 bt disconnect after timer: stored MOT is: ' + currentMOT + " actual MOT is: " + device.mode.current);
+
+    if (currentMOT === "driving") {
+        //in this case MOT === "driving" so let everything go  ....  
+        console.log('t#10b MOT ist still driving , do NOTHIN');
+    }
+    else {
+        // in this case we are NOT driving any more -- turn BT off
+        console.log('t#10a turn bt OFF now! ');
+        device.scheduler.removeTimer(timerNameoff); // turn off timer 
+        //device.bluetooth.enabled = false; // uncomment THIS TO ARM !!
+        var notification = device.notifications.createNotification('t#10a turn bt OFF now, this is the cruurentMOT: ' + currentMOT);
+        notification.show();
+    }
+});
+
+    });
+
+
+
     // when driving is detected try turning the bluetooth on and looking for the device
     device.modeOfTransport.on("changed", function (signal) {
+        currentMOT = signal.current;  // save current MOT 
         if (signal.current === "driving") {
 
             console.log('t#4 MOT equals driving detected!');
@@ -94,42 +133,14 @@ else {
             });
         }
         else {
-            // when other MOT as driving is detected see iff BT is still connected and if so turn it off after some wait time ...
+            // when other MOT as driving is detected just stick it into user 
+            var notification;  //DEBUG -- out 
 
             console.log('t#4a MOT non driving detected: ' + signal.current); //DEBUG -- out
             //stick it in users face as well: 
-            var notification = device.notifications.createNotification('MOT change(nonD) detected! ' + signal.current); //DEBUG -- out
+            notification = device.notifications.createNotification('MOT change(nonD) detected! ' + signal.current); //DEBUG -- out
             notification.content = "MOT mode: " + signal.current; //DEBUG -- out
             notification.show(); //DEBUG -- out
-
-            if (!device.bluetooth.enabled) {
-                console.log('t#8 bluetooth is already disabled. doing nothing');
-                return;
-            }
-
-            device.scheduler.setTimer({
-                name: timerNameoff,
-                time: new Date().getTime() + timeOut,
-                exact: true
-            },
-            function () {
-                if (bluetoothDevice.name.toString().substr(0, deviceName.toString().length) === deviceName) {
-                    // device connection still there 
-                    console.log("t#8a KIA bt STILL CONNECTED, doing nothing! dev: " + bluetoothDevice.name); //DEBUG -- out 
-                    var notification = device.notifications.createNotification("t#8a KIA bt STILL CONNECTED, doing nothing! dev: " + bluetoothDevice.name); //DEBUG -- out
-                    notification.show(); //DEBUG -- out
-                }
-                else {
-                    // we lost the connection -- turn BT off 
-                    device.scheduler.removeTimer(timerNameoff);
-                    console.log("t#8b KIA bt disconneted, turning BT off! dev: " + bluetoothDevice.name); //DEBUG -- out 
-                    notification = device.notifications.createNotification("t#8b KIA bt disconneted, turning BT off! dev: " + bluetoothDevice.name); //DEBUG -- out
-                    notification.show(); //DEBUG -- out
-
-                    //device.bluetooth.enabled =false;   // UNCOMMENT this to fire it up !
-                    //
-                }
-            });
         }
     });
 }
